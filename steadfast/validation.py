@@ -6,10 +6,9 @@ the validation error is fed back to the model as a correction hint and
 the call is retried — usually cheaper and more reliable than a single
 hard-coded parser giving up on the first bad response.
 """
+
 from typing import Awaitable, Callable, TypeVar
-
 from pydantic import BaseModel, ValidationError
-
 from .exceptions import ValidationRetryExceeded
 from .logging_utils import get_logger
 
@@ -33,6 +32,7 @@ async def validate_with_retry(
     call_fn: Callable[[str | None], Awaitable[str]],
     max_attempts: int = 3,
 ) -> SchemaT:
+    
     """
     Calls call_fn() to get raw text, validates it against schema. On
     failure, calls call_fn(repair_hint) again with the validation error
@@ -44,6 +44,7 @@ async def validate_with_retry(
 
     Raises ValidationRetryExceeded if every attempt fails.
     """
+
     last_error: str | None = None
 
     for attempt in range(1, max_attempts + 1):
