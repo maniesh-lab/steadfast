@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "steadfast"
+version = "0.1.0"
+description = "A reliability layer for LLM API calls: retries, rate limiting, validation, and structured logging."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+dependencies = [
+    "httpx>=0.28.1",
+    "tenacity>=9.0.0",
+    "pydantic>=2.9.0",
+    "structlog>=24.4.0",
+    "aiolimiter>=1.2.1",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+providers = [
+    "anthropic>=0.40.0",
+    "openai>=1.55.0",
+    "groq>=0.13.0",
+]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.1.0",
+    "respx>=0.22.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["steadfast*"]
