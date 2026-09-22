@@ -11,7 +11,7 @@ from .base import BaseProvider
 class GroqProvider(BaseProvider):
     name = "groq"
 
-    def __init__(self, api_key=None, model="llama-3.3-70b-versatile"):
+    def __init__(self, api_key=None, model="openai/gpt-oss-20b"):
         self.client = groq.AsyncGroq(api_key=api_key, max_retries=0)
         self.model = model
 
