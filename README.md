@@ -115,7 +115,20 @@ steadfast/
 
 ---
 
-## How to Run
+## Install
+
+Published on PyPI as `steadfast-llm` (the plain `steadfast` name was already
+taken by an unrelated package — the import name is unaffected):
+
+```bash
+pip install steadfast-llm
+```
+
+```python
+from steadfast.client import SteadfastClient
+```
+
+## How to Run (from source)
 
 **1. Clone the repo**
 ```bash
