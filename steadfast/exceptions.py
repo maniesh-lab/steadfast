@@ -47,9 +47,3 @@ class ValidationRetryExceeded(SteadfastError):
         super().__init__(message)
         self.attempts = attempts
         self.last_error = last_error
-
-
-class RateLimitBackoffExceeded(SteadfastError):
-    """The rate limiter was configured with a max wait time, and a call
-    would have needed to wait longer than that to stay within limits.
-    """
