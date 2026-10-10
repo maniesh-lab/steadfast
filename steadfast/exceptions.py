@@ -38,12 +38,27 @@ class NonRetryableProviderError(ProviderError):
 
 
 class ValidationRetryExceeded(SteadfastError):
-    """The response kept failing Pydantic validation even after every
-    configured retry attempt (including the retries where we fed the
-    validation error back to the model).
+    """The response kept failing validation even after every configured
+    attempt (including the retries where we fed the problems back to the
+    model).
+
+    Attributes:
+        attempts: how many attempts were made.
+        last_error: the last attempt's problems, joined into one string.
+        last_response: the model's last raw reply (or None).
+        errors: the last attempt's problems, one string per problem.
     """
 
-    def __init__(self, message: str, attempts: int, last_error: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        attempts: int,
+        last_error: str | None = None,
+        last_response: str | None = None,
+        errors: list[str] | None = None,
+    ):
         super().__init__(message)
         self.attempts = attempts
         self.last_error = last_error
+        self.last_response = last_response
+        self.errors = errors if errors is not None else []
