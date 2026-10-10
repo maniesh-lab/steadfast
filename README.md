@@ -6,9 +6,8 @@ correlation-ID structured logging, wrapped around Anthropic, OpenAI, and
 Groq's official SDKs behind one provider-agnostic client.
 
 Built as foundational infrastructure, not a standalone demo — reused by every
-AI-automation project after it in the same portfolio (a generate→QA→retry
-benchmark, an n8n automation layer, an agentic lead-gen pipeline, and a
-scheduled ops-bot) instead of each one hand-rolling its own retry, rate-limit,
+AI-automation project after it in the same portfolio (an n8n automation
+layer, an agentic lead-gen pipeline, and a scheduled ops-bot) instead of each one hand-rolling its own retry, rate-limit,
 and validation logic.
 
 ---
@@ -39,13 +38,23 @@ the full story of a single request can be traced after the fact.
 - **Per-provider rate limiting** (`aiolimiter`) — Anthropic, OpenAI, and Groq
   each get independent limits, configured separately
 - **Self-correcting structured output** — pass a Pydantic schema, and if the
-  model's response doesn't validate, the validation error is fed back to the
-  model as a correction hint and the call is retried automatically, up to a
-  configurable number of attempts
+  model's response doesn't validate, the problems are fed back to the model
+  (along with its own previous reply) and the call is retried automatically,
+  up to `max_attempts` total tries (default 3, settable per call)
+- **Tolerant JSON extraction** — replies wrapped in markdown code fences or
+  surrounded by chatter are cleaned up before validation, so they don't waste
+  a retry
+- **Custom validators** — pass `validators=[fn, ...]` to enforce rules a
+  schema can't express (a quote must appear verbatim in the source, deadlines
+  must be working days, totals must add up). Each function takes the parsed
+  object and returns `None` if fine, or a string describing the problem; that
+  string goes back to the model on retry
+- **Benchmarked** — a reproducible no-retry vs retry comparison ships in
+  `benchmark/` (results below)
 - **Structured JSON logging** (`structlog`) with correlation IDs — every
   retry, rate-limit wait, and validation attempt from one logical call
   shares a single ID
-- **20 automated tests**, all running against fake/mocked providers — no
+- **39 automated tests**, all running against fake/mocked providers — no
   live API key or network call required to run the suite
 - **Zero-cost to try** — the test suite and the example script both work
   entirely on free-tier access (Groq)
@@ -63,7 +72,7 @@ steadfast/
 │   ├── exceptions.py            # custom exception hierarchy
 │   ├── retry.py                 # tenacity retry policy
 │   ├── rate_limit.py            # per-provider rate limiting
-│   ├── validation.py            # pydantic validate-and-retry loop
+│   ├── validation.py            # parse → schema → custom validators → feedback loop
 │   ├── logging_utils.py         # structlog + correlation ID context
 │   └── providers/
 │       ├── base.py              # abstract provider interface
@@ -81,6 +90,11 @@ steadfast/
 │
 ├── examples/
 │   └── basic_usage.py           # plain call + schema-validated call, live against Groq
+│
+├── benchmark/
+│   ├── tasks.py                 # 6 extraction tasks + rule-based validators
+│   ├── run_benchmark.py         # no-retry vs retry comparison, live against Groq
+│   └── results.md               # latest results
 │
 ├── .env.example
 ├── .gitignore
@@ -107,9 +121,11 @@ steadfast/
 5. **Retry** — if the call fails with a transient error, it's retried
    automatically with exponential backoff and jitter, up to a configurable
    number of attempts; permanent errors raise immediately instead
-6. **Validate** (only if a schema was given) — the raw response is checked
-   against the schema; on a mismatch, the validation error is folded into
-   the next attempt's prompt as a correction hint, and the call is retried
+6. **Validate** (only if a schema was given) — the JSON is extracted from the
+   raw response, checked against the schema, then run through any custom
+   validators; on any failure, the model's previous reply and the list of
+   problems are folded into the next attempt's prompt, and the call is
+   retried (up to `max_attempts` total tries)
 7. **Log** — every step above is logged as structured JSON, tagged with one
    correlation ID per top-level `complete()` call
 
@@ -198,12 +214,69 @@ async def main():
 asyncio.run(main())
 ```
 
+### Custom validators and attempts
+
+```python
+fact = await client.complete(
+    "groq",
+    prompt,
+    schema=Fact,
+    max_attempts=3,  # total tries, including the first
+    validators=[
+        lambda f: None if f.fact in source_text
+        else "fact must be copied verbatim from the source text",
+    ],
+)
+```
+
+If every attempt fails, `ValidationRetryExceeded` is raised, carrying
+`attempts`, `last_response` (the model's last reply), and `errors` (the
+problems from the last attempt).
+
 ## Example Output
 
 ```
 Plain response: Hello
 Validated response: topic='Octopus Intelligence' fact='Some octopus species can solve puzzles and use tools.'
 ```
+
+---
+
+## Benchmark
+
+Does validate-and-retry actually help? `benchmark/run_benchmark.py` runs six
+extraction tasks (invoice, verbatim quotes, review score, action items, order
+total, contact) three times each, with and without retry, using identical
+schemas and validators. Validators state the rule that was broken, never the
+correct answer.
+
+Results with `openai/gpt-oss-20b` on Groq (2026-10-10):
+
+| Mode | Passed | Pass rate | Avg API calls |
+|---|---|---|---|
+| No retry (`max_attempts=1`) | 15 / 18 | 83% | 1.11 |
+| With retry (`max_attempts=3`) | 18 / 18 | 100% | 1.56 |
+
+How to read this:
+
+- **The gain came from one task.** "Action items" passed 0/3 without retry and
+  3/3 with it. The other five tasks passed first try every time, so retry had
+  nothing to fix there.
+- **Retry cost about 40% more API calls** on average (1.56 vs 1.11).
+- **Latency is not reported as a clean cost.** The benchmark ran under a
+  12-calls-per-minute rate limit, and time spent waiting on the limiter counts
+  toward each request's duration, so the raw timings overstate the cost of
+  retrying.
+- **It is a small sample:** 18 requests per mode, one model, one run. It is a
+  signal, not proof. A weaker model would likely show a larger gap.
+
+Reproduce it (needs a Groq key in `.env`):
+
+```bash
+python benchmark/run_benchmark.py            # optional: --trials 5 --model <name>
+```
+
+Full output is in [`benchmark/results.md`](benchmark/results.md).
 
 ---
 
@@ -217,7 +290,7 @@ Validated response: topic='Octopus Intelligence' fact='Some octopus species can 
 | `pydantic` | Structured output validation |
 | `structlog` | Structured JSON logging with correlation IDs |
 | `anthropic` / `openai` / `groq` | Official provider SDKs |
-| `pytest` + `pytest-asyncio` | Test suite — 20 tests, all against fakes/mocks |
+| `pytest` + `pytest-asyncio` | Test suite — 39 tests, all against fakes/mocks |
 
 ---
 
@@ -257,6 +330,17 @@ Listed deliberately, not hidden:
   `configure_logging()` prints structured JSON to stdout; wiring that into a
   file or log aggregator is left to whoever integrates Steadfast into a
   larger system.
+- **Feedback goes into a single prompt, not multi-turn messages.** The model's
+  previous reply (truncated to 2,000 characters) is pasted into the next
+  prompt rather than sent as a separate assistant message, because every
+  provider adapter takes one prompt string.
+- **Custom validators are synchronous.** A validator must return `None` or a
+  string. One that raises is treated as a bug in the validator and propagates
+  rather than being retried.
+- **Truncated replies get no special handling.** A reply cut off by
+  `max_tokens` fails as invalid JSON and uses up an attempt, because the
+  provider adapters don't expose `finish_reason` yet.
+- **The benchmark is small** (see above) and covers one model.
 
 ---
 
