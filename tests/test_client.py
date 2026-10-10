@@ -5,7 +5,7 @@ no real API calls happen and no real API key is needed.
 import pytest
 
 from steadfast.client import SteadfastClient
-from steadfast.exceptions import RetryableProviderError
+from steadfast.exceptions import RetryableProviderError, ValidationRetryExceeded
 from steadfast.providers.base import BaseProvider
 
 
@@ -19,9 +19,11 @@ class FakeProvider(BaseProvider):
     def __init__(self, responses):
         self.responses = list(responses)
         self.call_count = 0
+        self.prompts = []  # every prompt this provider received
 
     async def complete(self, prompt, **kwargs):
         self.call_count += 1
+        self.prompts.append(prompt)
         response = self.responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -83,3 +85,56 @@ async def test_unregistered_provider_raises():
     client = SteadfastClient()
     with pytest.raises(KeyError):
         await client.complete("nonexistent", "say hi")
+
+
+async def test_feedback_reaches_the_prompt(fact_schema):
+    provider = FakeProvider([
+        '{"topic": "x"}',                    # missing "fact"
+        '{"topic": "x", "fact": "y"}',
+    ])
+    client = SteadfastClient()
+    client.register(provider, rate=100, period=1)
+
+    await client.complete("fake", "give me a fact", schema=fact_schema)
+
+    assert provider.prompts[0] == "give me a fact"  # first prompt untouched
+    assert '{"topic": "x"}' in provider.prompts[1]  # model's bad reply echoed
+    assert "fact" in provider.prompts[1]            # and what was wrong
+
+
+async def test_max_attempts_is_respected(fact_schema):
+    provider = FakeProvider(['{"topic": "x"}'] * 5)
+    client = SteadfastClient()
+    client.register(provider, rate=100, period=1)
+
+    with pytest.raises(ValidationRetryExceeded):
+        await client.complete("fake", "give me a fact", schema=fact_schema, max_attempts=2)
+
+    assert provider.call_count == 2
+
+
+async def test_validators_work_through_the_client(fact_schema):
+    provider = FakeProvider([
+        '{"topic": "x", "fact": "TODO"}',
+        '{"topic": "x", "fact": "real fact"}',
+    ])
+    client = SteadfastClient()
+    client.register(provider, rate=100, period=1)
+
+    result = await client.complete(
+        "fake",
+        "give me a fact",
+        schema=fact_schema,
+        validators=[lambda r: "placeholder" if r.fact == "TODO" else None],
+    )
+
+    assert result.fact == "real fact"
+    assert provider.call_count == 2
+
+
+async def test_validators_without_schema_raises():
+    client = SteadfastClient()
+    client.register(FakeProvider(["hi"]), rate=100, period=1)
+
+    with pytest.raises(ValueError):
+        await client.complete("fake", "say hi", validators=[lambda r: None])
