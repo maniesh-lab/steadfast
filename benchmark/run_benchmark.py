@@ -38,11 +38,12 @@ class CountingProvider(BaseProvider):
     def __init__(self, inner):
         self.inner = inner
         self.name = inner.name
+        self.model = inner.model
         self.calls = 0
 
-    async def complete(self, prompt, **kwargs):
+    async def chat(self, messages, tools=None, tool_choice=None, **params):
         self.calls += 1
-        return await self.inner.complete(prompt, **kwargs)
+        return await self.inner.chat(messages, tools=tools, tool_choice=tool_choice, **params)
 
 
 def build_prompt(task):
