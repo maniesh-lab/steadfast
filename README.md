@@ -1,5 +1,8 @@
 # steadfast
 
+[![CI](https://github.com/maniesh-lab/steadfast/actions/workflows/ci.yml/badge.svg)](https://github.com/maniesh-lab/steadfast/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/steadfast-llm)](https://pypi.org/project/steadfast-llm/)
+
 A reliability layer for LLM API calls — retries with backoff, per-provider
 rate limiting, self-correcting Pydantic-validated structured output, and
 correlation-ID structured logging, wrapped around Anthropic, OpenAI, and
@@ -53,9 +56,12 @@ the full story of a single request can be traced after the fact.
   `benchmark/` (results below)
 - **Structured JSON logging** (`structlog`) with correlation IDs — every
   retry, rate-limit wait, and validation attempt from one logical call
-  shares a single ID
-- **39 automated tests**, all running against fake/mocked providers — no
+  shares a single ID. Pass your own with `correlation_id=...`, or call it
+  inside code that already bound one (like a web request) and that ID is
+  reused and left in place afterwards
+- **42 automated tests**, all running against fake/mocked providers — no
   live API key or network call required to run the suite
+- **CI on every push** — lint, tests, and a package build on Python 3.10–3.13
 - **Zero-cost to try** — the test suite and the example script both work
   entirely on free-tier access (Groq)
 
@@ -139,6 +145,8 @@ taken by an unrelated package — the import name is unaffected):
 ```bash
 pip install steadfast-llm
 ```
+
+Requires Python 3.10 or newer.
 
 ```python
 from steadfast.client import SteadfastClient
@@ -233,6 +241,16 @@ If every attempt fails, `ValidationRetryExceeded` is raised, carrying
 `attempts`, `last_response` (the model's last reply), and `errors` (the
 problems from the last attempt).
 
+### Correlation IDs
+
+```python
+# Tag this call's log lines with your own ID (e.g. your web request's ID)
+answer = await client.complete("groq", prompt, correlation_id=request_id)
+```
+
+If you leave it out, an ID already bound with `structlog.contextvars` is
+reused, otherwise a new one is generated.
+
 ## Example Output
 
 ```
@@ -284,13 +302,13 @@ Full output is in [`benchmark/results.md`](benchmark/results.md).
 
 | Tool | Purpose |
 |---|---|
-| `httpx` | Async HTTP, shared transport underlying the provider SDKs |
 | `tenacity` | Retry policy — exponential backoff with jitter |
 | `aiolimiter` | Per-provider async rate limiting |
 | `pydantic` | Structured output validation |
 | `structlog` | Structured JSON logging with correlation IDs |
 | `anthropic` / `openai` / `groq` | Official provider SDKs |
-| `pytest` + `pytest-asyncio` | Test suite — 39 tests, all against fakes/mocks |
+| `pytest` + `pytest-asyncio` | Test suite — 42 tests, all against fakes/mocks |
+| `ruff` + GitHub Actions | Lint and CI |
 
 ---
 
