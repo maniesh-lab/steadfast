@@ -5,7 +5,12 @@ All the work happens in _openai_compatible.py; this file only says
 which SDK and which default model to use.
 """
 
-import openai
+try:
+    import openai
+except ImportError as exc:  # pragma: no cover - only without the SDK installed
+    raise ImportError(
+        'OpenAIProvider needs the openai SDK: pip install "steadfast-llm[openai]"'
+    ) from exc
 
 from ._openai_compatible import OpenAICompatibleProvider
 

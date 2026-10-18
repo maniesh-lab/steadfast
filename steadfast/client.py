@@ -43,12 +43,21 @@ class SteadfastClient:
         self.max_wait = max_wait
         self.usage: dict[str, Usage] = {}  # tokens used, per provider name
 
-    def register(self, provider, rate: int = 50, period: float = 60) -> None:
+    def register(self, provider, rate: int = 50, period: float = 60, name: str | None = None) -> str:
         """Register a provider instance and set its rate limit
-        (`rate` calls per `period` seconds)."""
-        self.providers[provider.name] = provider
-        self.limiter.configure(provider.name, rate=rate, period=period)
-        self.usage.setdefault(provider.name, Usage())
+        (`rate` calls per `period` seconds).
+
+        name: what you'll call it in chat()/complete(). Defaults to the
+            provider's own name ("groq", "openai", "anthropic"). Use it to
+            register two models from the same provider, e.g.
+            register(GroqProvider(model="big"), name="groq-big").
+        Returns the name it was registered under.
+        """
+        name = name or provider.name
+        self.providers[name] = provider
+        self.limiter.configure(name, rate=rate, period=period)
+        self.usage.setdefault(name, Usage())
+        return name
 
     @property
     def total_usage(self) -> Usage:
@@ -200,8 +209,7 @@ class SteadfastClient:
                 async with self.limiter.acquire(name):
                     response = await _send(provider, messages, tools, tool_choice, params)
 
-        if response.provider is None:
-            response.provider = name
+        response.provider = name  # the name it was registered under
         self.usage[name].add(response.usage)
         log.info(
             "provider call finished",

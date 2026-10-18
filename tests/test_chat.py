@@ -296,6 +296,20 @@ def test_wait_caps_huge_retry_after():
     assert wait(_retry_state(exc)) <= RETRY_AFTER_CAP
 
 
+async def test_same_provider_can_be_registered_twice_under_different_names():
+    big = ScriptedProvider("groq", [NonRetryableProviderError("model gone", provider="groq")])
+    small = ScriptedProvider("groq", [reply("from small")])
+    client = make_client()
+    assert client.register(big, name="groq-big") == "groq-big"
+    client.register(small, name="groq-small", rate=1000, period=1)
+
+    response = await client.chat("groq-big", [{"role": "user", "content": "q"}], fallbacks=["groq-small"])
+
+    assert response.text == "from small"
+    assert response.provider == "groq-small"
+    assert client.usage["groq-small"].total_tokens == 15
+
+
 # --- old-style providers ------------------------------------------------------
 
 

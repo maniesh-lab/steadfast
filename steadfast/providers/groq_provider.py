@@ -5,7 +5,12 @@ Groq speaks OpenAI's format, so the work happens in
 _openai_compatible.py. The one Groq-specific rule is below.
 """
 
-import groq
+try:
+    import groq
+except ImportError as exc:  # pragma: no cover - only without the SDK installed
+    raise ImportError(
+        'GroqProvider needs the groq SDK: pip install "steadfast-llm[groq]"'
+    ) from exc
 
 from ..exceptions import RetryableProviderError
 from ._openai_compatible import OpenAICompatibleProvider

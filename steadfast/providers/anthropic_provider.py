@@ -15,7 +15,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import anthropic
+try:
+    import anthropic
+except ImportError as exc:  # pragma: no cover - only without the SDK installed
+    raise ImportError(
+        'AnthropicProvider needs the anthropic SDK: pip install "steadfast-llm[anthropic]"'
+    ) from exc
 
 from ..exceptions import RetryableProviderError
 from ..types import LLMResponse, ToolCall, Usage

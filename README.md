@@ -162,6 +162,9 @@ client.register(OpenAIProvider(model="gpt-4o-mini"), rate=60, period=60)
 answer = await client.complete("groq", prompt, fallbacks=["openai"])
 ```
 
+Want two models from the same provider? Register them under different names:
+`client.register(GroqProvider(model="..."), name="groq-small")`.
+
 Each provider gets its full set of retries first. If every provider fails you
 get `AllProvidersFailed`, whose `errors` lists what went wrong with each one.
 
@@ -303,7 +306,7 @@ steadfast/
 │       ├── openai_provider.py
 │       ├── groq_provider.py
 │       └── anthropic_provider.py  # translates to and from Anthropic's format
-├── tests/                       # 96 tests, all against fakes (no API key needed)
+├── tests/                       # 97 tests, all against fakes (no API key needed)
 ├── examples/
 │   ├── basic_usage.py           # plain + validated call
 │   └── tool_calling.py          # a small agent loop
@@ -323,7 +326,7 @@ cd steadfast
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[providers,dev]"
 
-pytest                    # 96 tests, no API key needed
+pytest                    # 97 tests, no API key needed
 ruff check .              # lint
 cp .env.example .env      # add a free Groq key from console.groq.com
 python examples/basic_usage.py

@@ -13,6 +13,9 @@
   output.
 - `fallbacks=[...]`: try other providers when one keeps failing
   (`AllProvidersFailed` if all do).
+- `register(..., name=...)`: register the same provider more than once
+  (e.g. a big and a small model) under different names.
+- A clear error message when a provider's SDK isn't installed.
 - Token usage per provider (`client.usage`) and in total (`client.total_usage`).
 - Retry settings on the client: `SteadfastClient(max_retries, min_wait, max_wait)`.
 - `Retry-After` headers are honored (capped at 60 seconds).
