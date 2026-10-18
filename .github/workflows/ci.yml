@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with all providers and dev tools
+        run: pip install -e ".[providers,dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest -q --cov=steadfast --cov-report=term-missing
+
+      - name: Build package
+        run: python -m build
+
+  lowest-versions:
+    # Installs the oldest version of every dependency that pyproject.toml
+    # allows, so the minimum versions it claims are actually tested.
+    name: test (oldest allowed dependencies)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install oldest allowed versions
+        run: |
+          uv venv -p 3.10
+          uv pip install --resolution lowest-direct -e ".[providers,dev]"
+
+      - name: Test
+        run: uv run --no-sync pytest -q

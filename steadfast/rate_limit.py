@@ -9,7 +9,9 @@ limit, or under-throttle one that is.
 
 import time
 from contextlib import asynccontextmanager
+
 from aiolimiter import AsyncLimiter
+
 from .logging_utils import get_logger
 
 log = get_logger()

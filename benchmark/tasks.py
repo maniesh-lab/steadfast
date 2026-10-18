@@ -9,9 +9,10 @@ Validators describe the RULE that was broken. They never reveal the
 correct answer, otherwise the retry would be trivially easy.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Callable, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 

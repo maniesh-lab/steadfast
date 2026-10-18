@@ -1,35 +1,24 @@
 """
-OpenAI adapter — implements BaseProvider using the official openai SDK.
-Same shape as anthropic_provider.py — OpenAI's SDK uses matching
-exception names.
+OpenAI adapter, using the official openai SDK.
+
+All the work happens in _openai_compatible.py; this file only says
+which SDK and which default model to use.
 """
 
-import openai
-from ..exceptions import NonRetryableProviderError, RetryableProviderError
-from .base import BaseProvider
+try:
+    import openai
+except ImportError as exc:  # pragma: no cover - only without the SDK installed
+    raise ImportError(
+        'OpenAIProvider needs the openai SDK: pip install "steadfast-llm[openai]"'
+    ) from exc
+
+from ._openai_compatible import OpenAICompatibleProvider
 
 
-class OpenAIProvider(BaseProvider):
+class OpenAIProvider(OpenAICompatibleProvider):
     name = "openai"
+    model = "gpt-4o"  # default; pass model=... to use another
+    sdk = openai
 
-    def __init__(self, api_key=None, model="gpt-4o"):
-        self.client = openai.AsyncOpenAI(api_key=api_key, max_retries=0)
-        self.model = model
-
-    async def complete(self, prompt, **kwargs):
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=kwargs.get("max_tokens", 1024),
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.choices[0].message.content
-
-        except openai.RateLimitError as e:
-            raise RetryableProviderError("rate limited", provider=self.name, original_exception=e)
-        except openai.APIConnectionError as e:
-            raise RetryableProviderError("connection failed", provider=self.name, original_exception=e)
-        except openai.InternalServerError as e:
-            raise RetryableProviderError("server error", provider=self.name, original_exception=e)
-        except openai.APIStatusError as e:
-            raise NonRetryableProviderError(str(e), provider=self.name, original_exception=e)
+    def _make_client(self, **options):
+        return openai.AsyncOpenAI(**options)

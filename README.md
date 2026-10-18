@@ -1,244 +1,252 @@
 # steadfast
 
-A reliability layer for LLM API calls — retries with backoff, per-provider
-rate limiting, self-correcting Pydantic-validated structured output, and
-correlation-ID structured logging, wrapped around Anthropic, OpenAI, and
-Groq's official SDKs behind one provider-agnostic client.
+[![CI](https://github.com/maniesh-lab/steadfast/actions/workflows/ci.yml/badge.svg)](https://github.com/maniesh-lab/steadfast/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/steadfast-llm)](https://pypi.org/project/steadfast-llm/)
+[![Python](https://img.shields.io/pypi/pyversions/steadfast-llm)](https://pypi.org/project/steadfast-llm/)
 
-Built as foundational infrastructure, not a standalone demo — reused by every
-AI-automation project after it in the same portfolio (an n8n automation
-layer, an agentic lead-gen pipeline, and a scheduled ops-bot) instead of each one hand-rolling its own retry, rate-limit,
-and validation logic.
+A reliability layer for LLM API calls. Wrap your OpenAI, Anthropic, or Groq
+calls in Steadfast and they retry when the API is busy, stay under rate
+limits, check that the model's output has the right shape (and ask it to fix
+it when it doesn't), fall back to another provider if one goes down, and log
+every step with one ID per request.
 
----
-
-## What it does
-
-Wraps calls to LLM providers with the operational concerns a production AI
-backend needs and otherwise has to hand-roll: retrying transient failures
-without wasting retries on permanent ones, respecting per-provider rate
-limits, validating that structured output actually matches the shape it's
-supposed to (and asking the model to fix its own mistake if it doesn't), and
-tagging every log line from one logical call with a shared correlation ID so
-the full story of a single request can be traced after the fact.
+It also handles conversations and tool calling in one format for all three
+providers, so it can sit underneath an agent.
 
 ---
 
-## Features
+## The problem
 
-- **Provider-agnostic client** — one `complete()` call works identically
-  across Anthropic, OpenAI, and Groq
-- **Retry policy** (via `tenacity`) that only retries transient failures
-  (rate limits, 5xx errors, connection drops) — permanent failures (bad API
-  key, malformed request) raise immediately instead of burning retry
-  attempts on something that will never succeed
-- Each provider's own built-in retry is disabled (`max_retries=0`) so retry
-  behavior is decided in exactly one place, consistently, across all three
-  providers
-- **Per-provider rate limiting** (`aiolimiter`) — Anthropic, OpenAI, and Groq
-  each get independent limits, configured separately
-- **Self-correcting structured output** — pass a Pydantic schema, and if the
-  model's response doesn't validate, the problems are fed back to the model
-  (along with its own previous reply) and the call is retried automatically,
-  up to `max_attempts` total tries (default 3, settable per call)
-- **Tolerant JSON extraction** — replies wrapped in markdown code fences or
-  surrounded by chatter are cleaned up before validation, so they don't waste
-  a retry
-- **Custom validators** — pass `validators=[fn, ...]` to enforce rules a
-  schema can't express (a quote must appear verbatim in the source, deadlines
-  must be working days, totals must add up). Each function takes the parsed
-  object and returns `None` if fine, or a string describing the problem; that
-  string goes back to the model on retry
-- **Benchmarked** — a reproducible no-retry vs retry comparison ships in
-  `benchmark/` (results below)
-- **Structured JSON logging** (`structlog`) with correlation IDs — every
-  retry, rate-limit wait, and validation attempt from one logical call
-  shares a single ID
-- **39 automated tests**, all running against fake/mocked providers — no
-  live API key or network call required to run the suite
-- **Zero-cost to try** — the test suite and the example script both work
-  entirely on free-tier access (Groq)
+When an app talks to an LLM API, the same things go wrong again and again:
 
----
-
-## Project Structure
-
-```
-steadfast/
-│
-├── steadfast/
-│   ├── __init__.py
-│   ├── client.py                # SteadfastClient — wires everything together
-│   ├── exceptions.py            # custom exception hierarchy
-│   ├── retry.py                 # tenacity retry policy
-│   ├── rate_limit.py            # per-provider rate limiting
-│   ├── validation.py            # parse → schema → custom validators → feedback loop
-│   ├── logging_utils.py         # structlog + correlation ID context
-│   └── providers/
-│       ├── base.py              # abstract provider interface
-│       ├── anthropic_provider.py
-│       ├── openai_provider.py
-│       └── groq_provider.py
-│
-├── tests/
-│   ├── conftest.py              # shared fact_schema fixture
-│   ├── test_retry.py
-│   ├── test_rate_limit.py
-│   ├── test_validation.py
-│   ├── test_logging.py
-│   └── test_client.py
-│
-├── examples/
-│   └── basic_usage.py           # plain call + schema-validated call, live against Groq
-│
-├── benchmark/
-│   ├── tasks.py                 # 6 extraction tasks + rule-based validators
-│   ├── run_benchmark.py         # no-retry vs retry comparison, live against Groq
-│   └── results.md               # latest results
-│
-├── .env.example
-├── .gitignore
-├── LICENSE
-├── pyproject.toml
-├── requirements.txt
-└── README.md
-```
-
----
-
-## How It Works
-
-1. **Register** — a provider (Anthropic/OpenAI/Groq) is created and
-   registered with the client, along with its rate limit
-2. **Call** — `client.complete(provider_name, prompt, schema=...)` is called
-   with a prompt and, optionally, a Pydantic schema describing the expected
-   response shape
-3. **Rate limit** — the call waits, if needed, for a slot to open under that
-   provider's configured rate
-4. **Request** — the prompt is sent through the provider's real SDK;
-   SDK-level retries are disabled so nothing retries invisibly underneath
-   Steadfast
-5. **Retry** — if the call fails with a transient error, it's retried
-   automatically with exponential backoff and jitter, up to a configurable
-   number of attempts; permanent errors raise immediately instead
-6. **Validate** (only if a schema was given) — the JSON is extracted from the
-   raw response, checked against the schema, then run through any custom
-   validators; on any failure, the model's previous reply and the list of
-   problems are folded into the next attempt's prompt, and the call is
-   retried (up to `max_attempts` total tries)
-7. **Log** — every step above is logged as structured JSON, tagged with one
-   correlation ID per top-level `complete()` call
+| What goes wrong | What Steadfast does |
+|---|---|
+| The API is busy (429), down (5xx), or the connection drops | Waits and tries again, longer each time. Permanent errors (bad key, bad request) fail right away instead of wasting retries |
+| You send requests faster than your plan allows | Makes calls wait in line, with a separate limit per provider |
+| The model returns broken JSON, the wrong fields, or a broken tool call | Tells the model exactly what was wrong and asks again |
+| One provider keeps failing | Moves on to the next provider you listed |
+| Something broke and you can't tell what happened | Logs every call, retry, and wait as JSON, all tagged with one correlation ID |
+| You don't know what it's costing you | Counts input and output tokens per provider |
 
 ---
 
 ## Install
 
-Published on PyPI as `steadfast-llm` (the plain `steadfast` name was already
-taken by an unrelated package — the import name is unaffected):
-
 ```bash
-pip install steadfast-llm
+pip install "steadfast-llm[groq]"        # or [openai], [anthropic], or [providers] for all three
 ```
 
-```python
-from steadfast.client import SteadfastClient
-```
-
-## How to Run (from source)
-
-**1. Clone the repo**
-```bash
-git clone https://github.com/maniesh-lab/steadfast
-cd steadfast
-```
-
-**2. Create and activate a virtual environment**
-```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-**3. Install dependencies**
-```bash
-pip install -e ".[providers,dev]"
-```
-
-**4. Set up environment variables**
-```bash
-cp .env.example .env
-```
-Add a free Groq API key from [console.groq.com](https://console.groq.com) to
-`.env` (Anthropic/OpenAI keys are optional — only needed if you use those
-providers instead).
-
-**5. Run the example**
-```bash
-python examples/basic_usage.py
-```
-
-**6. Run the test suite**
-```bash
-pytest tests/ -v
-```
+Requires Python 3.10+. The import name is `steadfast` (the plain `steadfast`
+name on PyPI belongs to an unrelated package).
 
 ---
 
-## Example Usage
+## Quick start
 
 ```python
 import asyncio
-from pydantic import BaseModel
-from steadfast.client import SteadfastClient
+from steadfast import SteadfastClient
 from steadfast.providers.groq_provider import GroqProvider
 
+
+async def main():
+    client = SteadfastClient()
+    client.register(GroqProvider(), rate=30, period=60)  # 30 calls per minute
+
+    answer = await client.complete("groq", "Say hello in one word.")
+    print(answer)
+
+asyncio.run(main())
+```
+
+API keys come from the usual environment variables (`GROQ_API_KEY`,
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) or `GroqProvider(api_key=...)`. Pick a
+model with `GroqProvider(model="...")`.
+
+---
+
+## Structured output
+
+Pass a Pydantic model and you get a validated object back. If the reply isn't
+valid JSON, has the wrong fields, or fails one of your checks, Steadfast sends
+the model its own reply plus the list of problems and asks again, up to
+`max_attempts` total tries.
+
+```python
+from pydantic import BaseModel
 
 class Fact(BaseModel):
     topic: str
     fact: str
 
-
-async def main():
-    client = SteadfastClient()
-    client.register(GroqProvider(), rate=30, period=60)
-
-    # Plain text — no schema
-    answer = await client.complete("groq", "Say hello in one word.")
-
-    # Structured, self-correcting output
-    fact = await client.complete(
-        "groq",
-        'Give me a fact about octopuses as JSON: {"topic": "...", "fact": "..."}',
-        schema=Fact,
-    )
-
-asyncio.run(main())
-```
-
-### Custom validators and attempts
-
-```python
 fact = await client.complete(
     "groq",
-    prompt,
+    'Give me a fact about octopuses as JSON: {"topic": "...", "fact": "..."}',
     schema=Fact,
-    max_attempts=3,  # total tries, including the first
+    system="Answer only in JSON.",
+    max_attempts=3,
     validators=[
-        lambda f: None if f.fact in source_text
-        else "fact must be copied verbatim from the source text",
+        # Rules a schema can't express. Return None if fine, or a string saying
+        # what's wrong. That string goes back to the model. Can also be async.
+        lambda f: None if len(f.fact) < 200 else "fact must be under 200 characters",
     ],
 )
 ```
 
-If every attempt fails, `ValidationRetryExceeded` is raised, carrying
-`attempts`, `last_response` (the model's last reply), and `errors` (the
-problems from the last attempt).
+If every attempt fails you get `ValidationRetryExceeded`, with `attempts`,
+`errors` (the last problems), and `last_response` (the model's last reply).
+JSON wrapped in code fences or surrounded by chatter is cleaned up first, so
+it doesn't waste a try. A reply cut off by `max_tokens` gets a "be shorter"
+hint.
 
-## Example Output
+---
 
+## Conversations and tool calling
+
+`chat()` takes a list of messages and returns an `LLMResponse`, the same shape
+for every provider:
+
+```python
+response = await client.chat("groq", [
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "Hi!"},
+])
+response.text           # the reply
+response.tool_calls     # tools the model wants to run ([] if none)
+response.finish_reason  # "stop", "length", or "tool_calls"
+response.usage          # Usage(input_tokens=..., output_tokens=...)
+response.provider       # which provider answered
 ```
-Plain response: Hello
-Validated response: topic='Octopus Intelligence' fact='Some octopus species can solve puzzles and use tools.'
+
+Messages and tools use OpenAI's format everywhere. For Anthropic, Steadfast
+translates them (system prompt, tool calls, and tool results) both ways.
+
+A tool is a function the model can ask you to run. Describe it, pass it in,
+run it when asked, and send the result back:
+
+```python
+from pydantic import BaseModel
+from steadfast import function_tool, tool_result
+
+class OrderArgs(BaseModel):
+    order_id: str
+
+tools = [function_tool("get_order_status", "Look up an order by ID.", OrderArgs)]
+messages = [{"role": "user", "content": "Where is order A100?"}]
+
+for _ in range(5):  # always cap the steps
+    response = await client.chat("groq", messages, tools=tools)
+    if not response.tool_calls:
+        print(response.text)
+        break
+    messages.append(response.to_message())          # keep the model's request
+    for call in response.tool_calls:
+        args = OrderArgs(**call.arguments)           # already parsed from JSON
+        messages.append(tool_result(call, look_up(args.order_id)))
 ```
+
+If the model sends tool-call arguments that aren't valid JSON, Steadfast asks
+it to try again, so the `arguments` you get are always a parsed dict. The full
+runnable version is in [`examples/tool_calling.py`](examples/tool_calling.py).
+`tool_choice` (`"auto"`, `"required"`, `"none"`, or a specific tool) is
+supported too.
+
+---
+
+## Fallbacks
+
+```python
+client.register(GroqProvider(), rate=30, period=60)
+client.register(OpenAIProvider(model="gpt-4o-mini"), rate=60, period=60)
+
+answer = await client.complete("groq", prompt, fallbacks=["openai"])
+```
+
+Want two models from the same provider? Register them under different names:
+`client.register(GroqProvider(model="..."), name="groq-small")`.
+
+Each provider gets its full set of retries first. If every provider fails you
+get `AllProvidersFailed`, whose `errors` lists what went wrong with each one.
+
+---
+
+## Retries and rate limits
+
+```python
+client = SteadfastClient(
+    max_retries=5,   # tries per provider for transient errors, first try included
+    min_wait=1.0,    # backoff starts here (seconds) ...
+    max_wait=30.0,   # ... and never goes above this
+)
+client.register(GroqProvider(timeout=60), rate=30, period=60)
+```
+
+What counts as transient: rate limits (429), timeouts (408 and request
+timeouts), conflicts (409), server errors (5xx, including Anthropic's 529
+"overloaded"), dropped connections, and Groq's `tool_use_failed`. Everything
+else raises `NonRetryableProviderError` immediately. When a provider sends a
+`Retry-After` header, Steadfast waits at least that long (up to 60 seconds).
+
+The SDKs' own hidden retries are switched off (`max_retries=0`), so all retry
+decisions happen in one place and every retry shows up in the logs.
+
+Any other settings (`temperature`, `max_tokens`, `stop`, `top_p`, ...) are
+passed straight through to the provider.
+
+---
+
+## Token usage
+
+```python
+client.usage["groq"]                  # Usage(input_tokens=..., output_tokens=...)
+client.total_usage.total_tokens       # across all providers
+```
+
+Counted for every call, including retries caused by bad output, since those
+cost tokens too.
+
+---
+
+## Logging and correlation IDs
+
+```python
+from steadfast import configure_logging
+configure_logging()  # JSON logs to stdout
+```
+
+Every log line from one call shares a correlation ID: the call itself, each
+retry, rate-limit waits, validation failures, fallbacks, and a final line with
+latency, tokens, and finish reason. Pass your own with
+`correlation_id=request_id`, or call Steadfast inside code that already bound
+one with `structlog.contextvars` (like a web request) and that ID is reused
+and left in place afterwards.
+
+---
+
+## Errors you can get
+
+| Exception | When |
+|---|---|
+| `RetryableProviderError` | Transient error that kept happening after every retry (has `retry_after` if the provider sent one) |
+| `NonRetryableProviderError` | Permanent error: bad key, bad request, unknown model |
+| `AllProvidersFailed` | You passed `fallbacks` and every provider failed (`errors` has each one) |
+| `ValidationRetryExceeded` | Output still invalid after `max_attempts` tries |
+
+All of them inherit from `SteadfastError`, and the provider errors from
+`ProviderError` (with `provider` and `original_exception`).
+
+---
+
+## How one call works
+
+From the outside in:
+
+1. **Correlation ID**: one ID is bound for every log line of this call
+2. **Validation loop**: bad output goes back to the model with the problems listed, up to `max_attempts`
+3. **Fallback chain**: if a provider keeps failing, try the next one
+4. **Transport retry**: transient errors wait (backoff plus jitter, or `Retry-After`) and try again
+5. **Rate limiter**: wait for a free slot under that provider's limit
+6. **Provider adapter**: the real SDK call, with the answer translated into an `LLMResponse`
 
 ---
 
@@ -246,11 +254,11 @@ Validated response: topic='Octopus Intelligence' fact='Some octopus species can 
 
 Does validate-and-retry actually help? `benchmark/run_benchmark.py` runs six
 extraction tasks (invoice, verbatim quotes, review score, action items, order
-total, contact) three times each, with and without retry, using identical
+total, contact) three times each, with and without retry, using the same
 schemas and validators. Validators state the rule that was broken, never the
 correct answer.
 
-Results with `openai/gpt-oss-20b` on Groq (2026-10-10):
+Results with `openai/gpt-oss-20b` on Groq (2026-10-10, measured with v0.2):
 
 | Mode | Passed | Pass rate | Avg API calls |
 |---|---|---|---|
@@ -260,17 +268,15 @@ Results with `openai/gpt-oss-20b` on Groq (2026-10-10):
 How to read this:
 
 - **The gain came from one task.** "Action items" passed 0/3 without retry and
-  3/3 with it. The other five tasks passed first try every time, so retry had
-  nothing to fix there.
+  3/3 with it. The other five passed first try every time.
 - **Retry cost about 40% more API calls** on average (1.56 vs 1.11).
-- **Latency is not reported as a clean cost.** The benchmark ran under a
-  12-calls-per-minute rate limit, and time spent waiting on the limiter counts
-  toward each request's duration, so the raw timings overstate the cost of
-  retrying.
-- **It is a small sample:** 18 requests per mode, one model, one run. It is a
-  signal, not proof. A weaker model would likely show a larger gap.
-
-Reproduce it (needs a Groq key in `.env`):
+- **Latency isn't reported as a clean cost**: the run used a
+  12-calls-per-minute limit, and time spent waiting on the limiter inflates
+  the timings.
+- **It's a small sample**: 18 requests per mode, one model, one run. A signal,
+  not proof.
+- **Measured before v0.3**, when feedback was pasted into one prompt instead
+  of sent as conversation turns. Rerun it to get v0.3 numbers.
 
 ```bash
 python benchmark/run_benchmark.py            # optional: --trials 5 --model <name>
@@ -280,70 +286,82 @@ Full output is in [`benchmark/results.md`](benchmark/results.md).
 
 ---
 
-## Tech Stack
+## Project structure
 
-| Tool | Purpose |
-|---|---|
-| `httpx` | Async HTTP, shared transport underlying the provider SDKs |
-| `tenacity` | Retry policy — exponential backoff with jitter |
-| `aiolimiter` | Per-provider async rate limiting |
-| `pydantic` | Structured output validation |
-| `structlog` | Structured JSON logging with correlation IDs |
-| `anthropic` / `openai` / `groq` | Official provider SDKs |
-| `pytest` + `pytest-asyncio` | Test suite — 39 tests, all against fakes/mocks |
+```
+steadfast/
+├── steadfast/
+│   ├── __init__.py              # public API: SteadfastClient, errors, helpers
+│   ├── client.py                # SteadfastClient: chat(), complete(), fallbacks, usage
+│   ├── types.py                 # LLMResponse, ToolCall, Usage, tool_result()
+│   ├── tools.py                 # function_tool() for describing tools
+│   ├── exceptions.py            # error types
+│   ├── retry.py                 # backoff + Retry-After policy (tenacity)
+│   ├── rate_limit.py            # per-provider rate limiting (aiolimiter)
+│   ├── validation.py            # parse -> schema -> validators -> feedback
+│   ├── logging_utils.py         # structlog setup + correlation IDs
+│   └── providers/
+│       ├── base.py              # adapter contract + shared error rules
+│       ├── _openai_compatible.py  # shared OpenAI-format code (OpenAI, Groq)
+│       ├── openai_provider.py
+│       ├── groq_provider.py
+│       └── anthropic_provider.py  # translates to and from Anthropic's format
+├── tests/                       # 97 tests, all against fakes (no API key needed)
+├── examples/
+│   ├── basic_usage.py           # plain + validated call
+│   └── tool_calling.py          # a small agent loop
+├── benchmark/                   # no-retry vs retry comparison
+├── .github/workflows/ci.yml     # lint, tests, build, oldest-versions check
+├── CHANGELOG.md
+└── pyproject.toml
+```
 
 ---
 
-## Use Case
+## Development
 
-Built as the reliability layer every other AI-automation project in this
-portfolio sits on top of, rather than each one hand-rolling its own retry,
-rate-limit, and validation logic. Useful anywhere an app calls an LLM API and
-needs it to fail gracefully, respect rate limits, and produce output that
-actually matches an expected shape — instead of trusting the model to get it
-right on the first try, every time.
+```bash
+git clone https://github.com/maniesh-lab/steadfast
+cd steadfast
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[providers,dev]"
+
+pytest                    # 97 tests, no API key needed
+ruff check .              # lint
+cp .env.example .env      # add a free Groq key from console.groq.com
+python examples/basic_usage.py
+python examples/tool_calling.py
+```
+
+CI runs lint, tests with coverage, and a package build on Python 3.10–3.13,
+plus one job that installs the oldest dependency versions `pyproject.toml`
+allows, so the minimum versions are real.
 
 ---
 
-## Known Limitations
+## Known limitations
 
-Listed deliberately, not hidden:
+Listed on purpose, not hidden:
 
-- **Only `max_tokens` is forwarded to the underlying SDK call.**
-  `complete()` accepts arbitrary `**kwargs` (e.g. `temperature`), but the
-  current provider adapters only read `max_tokens` out of that dictionary —
-  other settings are silently dropped rather than passed through. Easy to
-  extend, just not wired up yet for anything beyond `max_tokens`.
-- **No streaming support.** `complete()` returns a full response, not a
-  token stream — not currently needed by anything Steadfast is used for, but
-  a real constraint if a future use case wants incremental output.
-- **`@with_retry()` is applied fresh on every `complete()` call**, rather
-  than being built once and reused. Functionally correct, a minor
-  inefficiency a very close review would flag.
-- **Retry/backoff timing in `client.py` isn't configurable per-call** — it
-  currently uses `retry.py`'s defaults (5 attempts, 1–30s backoff) rather
-  than exposing those settings through `complete()` itself.
-- **Only three providers implemented** (Anthropic, OpenAI, Groq) — adding
-  another means writing one more adapter file following the same
-  `BaseProvider` contract, not a structural change.
-- **No persistent/file logging configured out of the box** —
-  `configure_logging()` prints structured JSON to stdout; wiring that into a
-  file or log aggregator is left to whoever integrates Steadfast into a
-  larger system.
-- **Feedback goes into a single prompt, not multi-turn messages.** The model's
-  previous reply (truncated to 2,000 characters) is pasted into the next
-  prompt rather than sent as a separate assistant message, because every
-  provider adapter takes one prompt string.
-- **Custom validators are synchronous.** A validator must return `None` or a
-  string. One that raises is treated as a bug in the validator and propagates
-  rather than being retried.
-- **Truncated replies get no special handling.** A reply cut off by
-  `max_tokens` fails as invalid JSON and uses up an attempt, because the
-  provider adapters don't expose `finish_reason` yet.
-- **The benchmark is small** (see above) and covers one model.
+- **No streaming.** Each call returns the full reply.
+- **Async only.** There's no synchronous client; use `asyncio.run()` in scripts.
+- **Rate limits count requests, not tokens.** Providers also limit tokens per
+  minute; Steadfast relies on retrying 429s for that.
+- **Tool arguments are parsed, not checked against your schema.** You get a
+  dict of valid JSON; check its fields yourself (e.g. `MyArgs(**call.arguments)`).
+- **Images and other non-text content** are passed to Anthropic as-is, not
+  translated from OpenAI's format.
+- **A validator that raises an exception** is treated as a bug and stops the
+  call, rather than counting as a failed attempt.
+- **Retry-After is capped at 60 seconds**, so a provider asking for longer gets
+  retried sooner than it asked.
+- **Default model names go stale.** Pass `model=...` for anything that matters.
+- **Tested against fakes.** The test suite mocks every SDK; the examples and
+  benchmark are what run against a live API.
+- **The benchmark is small** and was measured with v0.2 (see above).
 
 ---
 
 ## Author
 
-**Manish Pandeya** · [github.com/maniesh-lab](https://github.com/maniesh-lab)
+**Manish Pandeya** · [github.com/maniesh-lab](https://github.com/maniesh-lab) · MIT License

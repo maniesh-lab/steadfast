@@ -1,34 +1,41 @@
 """
-Groq adapter — implements BaseProvider using the official groq SDK.
-Same shape again — groq's SDK mirrors the same exception names too.
+Groq adapter, using the official groq SDK.
+
+Groq speaks OpenAI's format, so the work happens in
+_openai_compatible.py. The one Groq-specific rule is below.
 """
 
-import groq
-from ..exceptions import NonRetryableProviderError, RetryableProviderError
-from .base import BaseProvider
+try:
+    import groq
+except ImportError as exc:  # pragma: no cover - only without the SDK installed
+    raise ImportError(
+        'GroqProvider needs the groq SDK: pip install "steadfast-llm[groq]"'
+    ) from exc
+
+from ..exceptions import RetryableProviderError
+from ._openai_compatible import OpenAICompatibleProvider
 
 
-class GroqProvider(BaseProvider):
+class GroqProvider(OpenAICompatibleProvider):
     name = "groq"
+    model = "openai/gpt-oss-20b"  # default; pass model=... to use another
+    sdk = groq
 
-    def __init__(self, api_key=None, model="openai/gpt-oss-20b"):
-        self.client = groq.AsyncGroq(api_key=api_key, max_retries=0)
-        self.model = model
+    def _make_client(self, **options):
+        return groq.AsyncGroq(**options)
 
-    async def complete(self, prompt, **kwargs):
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=kwargs.get("max_tokens", 1024),
-                messages=[{"role": "user", "content": prompt}],
+    def _map_error(self, exc):
+        # When a model writes a broken tool call, Groq rejects it with a
+        # 400 "tool_use_failed" instead of returning it. Asking again
+        # usually works, so treat it as retryable rather than permanent.
+        if isinstance(exc, groq.BadRequestError) and "tool_use_failed" in _error_text(exc):
+            return RetryableProviderError(
+                f"model produced an invalid tool call: {exc}",
+                provider=self.name,
+                original_exception=exc,
             )
-            return response.choices[0].message.content
+        return super()._map_error(exc)
 
-        except groq.RateLimitError as e:
-            raise RetryableProviderError("rate limited", provider=self.name, original_exception=e)
-        except groq.APIConnectionError as e:
-            raise RetryableProviderError("connection failed", provider=self.name, original_exception=e)
-        except groq.InternalServerError as e:
-            raise RetryableProviderError("server error", provider=self.name, original_exception=e)
-        except groq.APIStatusError as e:
-            raise NonRetryableProviderError(str(e), provider=self.name, original_exception=e)
+
+def _error_text(exc):
+    return f"{exc} {getattr(exc, 'body', '')} {getattr(exc, 'code', '')}"

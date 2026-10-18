@@ -1,10 +1,6 @@
-httpx>=0.28.1
-tenacity>=9.0.0
-pydantic>=2.9.0
-structlog>=24.4.0
-aiolimiter>=1.2.1
-python-dotenv>=1.0.1
-
-pytest>=8.4.0
-pytest-asyncio>=1.1.0
-respx>=0.22.0
+# Everything needed to work on Steadfast from source: the package itself
+# (editable), all three provider SDKs, and the test/lint/build tools.
+# The real dependency list lives in pyproject.toml.
+#
+#   pip install -r requirements.txt
+-e .[providers,dev]
