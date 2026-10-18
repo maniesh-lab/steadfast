@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,11 +7,10 @@ name = "steadfast-llm"
 version = "0.2.0"
 description = "A reliability layer for LLM API calls: retries, rate limiting, validation, and structured logging."
 readme = "README.md"
-requires = ["setuptools>=77.0"]      # was >=68.0
-license = "MIT"                      # was license = { text = "MIT" }
+license = "MIT"
+requires-python = ">=3.10"
 
 dependencies = [
-    "httpx>=0.28.1",
     "tenacity>=9.0.0",
     "pydantic>=2.9.0",
     "structlog>=24.4.0",
@@ -28,7 +27,6 @@ providers = [
 dev = [
     "pytest>=8.4.0",
     "pytest-asyncio>=1.1.0",
-    "respx>=0.22.0",
     "build>=1.2.0",
     "twine>=6.0.0",
     "ruff>=0.8.0",
