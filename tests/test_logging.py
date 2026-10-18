@@ -39,9 +39,11 @@ def test_correlation_id_is_unbound_after_block():
     assert "correlation_id" not in bound
 
 def test_reuses_an_outer_id_when_none_is_given():
-    with correlation_context(correlation_id="request-id") as outer:
-        with correlation_context() as inner:
-            assert inner == outer == "request-id"
+    with (
+        correlation_context(correlation_id="request-id") as outer,
+        correlation_context() as inner,
+    ):
+        assert inner == outer == "request-id"
 
 
 def test_outer_id_is_restored_after_inner_block():

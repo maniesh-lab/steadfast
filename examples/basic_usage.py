@@ -9,6 +9,7 @@ repo root.
 """
 
 import asyncio
+
 from dotenv import load_dotenv
 from pydantic import BaseModel
 

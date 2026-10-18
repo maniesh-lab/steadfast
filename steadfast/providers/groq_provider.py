@@ -4,6 +4,7 @@ Same shape again — groq's SDK mirrors the same exception names too.
 """
 
 import groq
+
 from ..exceptions import NonRetryableProviderError, RetryableProviderError
 from .base import BaseProvider
 

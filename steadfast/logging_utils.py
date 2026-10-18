@@ -8,6 +8,7 @@ currently bound, without you having to pass it into every function call.
 import logging
 import uuid
 from contextlib import contextmanager
+
 import structlog
 
 

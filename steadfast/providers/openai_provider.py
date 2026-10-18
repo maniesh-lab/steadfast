@@ -5,6 +5,7 @@ exception names.
 """
 
 import openai
+
 from ..exceptions import NonRetryableProviderError, RetryableProviderError
 from .base import BaseProvider
 
