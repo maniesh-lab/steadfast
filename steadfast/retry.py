@@ -45,7 +45,7 @@ def with_retry(max_attempts: int = 5, min_wait: float = 1.0, max_wait: float = 3
     return retry(
         retry=retry_if_exception_type(RetryableProviderError),
         stop=stop_after_attempt(max_attempts),
-        wait=wait_exponential_jitter(initial=min_wait, max=max_wait),
+        wait=wait_exponential_jitter(multiplier=min_wait, max=max_wait),
         before_sleep=_log_retry_attempt,
         reraise=True,
     )
