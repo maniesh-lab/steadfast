@@ -24,7 +24,14 @@ class SteadfastClient:
 
 
     async def complete(
-        self, provider_name, prompt, schema=None, max_attempts=3, validators=None, **kwargs
+        self,
+        provider_name,
+        prompt,
+        schema=None,
+        max_attempts=3,
+        validators=None,
+        correlation_id=None,
+        **kwargs,
     ):
         """
         Call a registered provider, with rate limiting and retries.
@@ -35,6 +42,9 @@ class SteadfastClient:
         validators: optional list of functions. Each takes the parsed
             object and returns None if fine, or a string describing the
             problem. Requires schema.
+        correlation_id: optional ID to tag this call's log lines with.
+            If not given, an ID already bound by the caller (for example
+            a web request's ID) is reused, otherwise a new one is made.
         """
         if validators and schema is None:
             raise ValueError("validators need a schema - pass schema=... too.")
@@ -57,7 +67,7 @@ class SteadfastClient:
             async with self.limiter.acquire(provider_name):
                 return await provider.complete(full_prompt, **kwargs)
 
-        with correlation_context() as cid:
+        with correlation_context(correlation_id) as cid:
             log.info("calling provider", provider=provider_name, correlation_id=cid)
             if schema is not None:
                 return await validate_with_retry(

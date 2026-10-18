@@ -3,6 +3,7 @@ Tests for client.py — the full wiring, tested with a fake provider so
 no real API calls happen and no real API key is needed.
 """
 import pytest
+import structlog
 
 from steadfast.client import SteadfastClient
 from steadfast.exceptions import RetryableProviderError, ValidationRetryExceeded
@@ -138,3 +139,23 @@ async def test_validators_without_schema_raises():
 
     with pytest.raises(ValueError):
         await client.complete("fake", "say hi", validators=[lambda r: None])
+
+
+async def test_correlation_id_param_is_used_and_outer_id_survives():
+    seen = []
+
+    class RecordingProvider(FakeProvider):
+        async def complete(self, prompt, **kwargs):
+            seen.append(structlog.contextvars.get_contextvars().get("correlation_id"))
+            return await super().complete(prompt, **kwargs)
+
+    client = SteadfastClient()
+    client.register(RecordingProvider(["hi"]), rate=100, period=1)
+
+    structlog.contextvars.bind_contextvars(correlation_id="request-id")
+    try:
+        await client.complete("fake", "say hi", correlation_id="call-id")
+        assert seen == ["call-id"]
+        assert structlog.contextvars.get_contextvars()["correlation_id"] == "request-id"
+    finally:
+        structlog.contextvars.unbind_contextvars("correlation_id")

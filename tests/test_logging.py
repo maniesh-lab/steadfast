@@ -37,3 +37,16 @@ def test_correlation_id_is_unbound_after_block():
         pass
     bound = structlog.contextvars.get_contextvars()
     assert "correlation_id" not in bound
+
+def test_reuses_an_outer_id_when_none_is_given():
+    with correlation_context(correlation_id="request-id") as outer:
+        with correlation_context() as inner:
+            assert inner == outer == "request-id"
+
+
+def test_outer_id_is_restored_after_inner_block():
+    with correlation_context(correlation_id="request-id"):
+        with correlation_context(correlation_id="call-id"):
+            pass
+        bound = structlog.contextvars.get_contextvars()
+        assert bound.get("correlation_id") == "request-id"

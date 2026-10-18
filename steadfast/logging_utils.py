@@ -40,13 +40,20 @@ def correlation_context(correlation_id: str | None = None):
     """
     Bind a correlation ID for the duration of a `with` block.
 
+    Which ID is used, in order:
+    1. the one you pass in
+    2. the one already bound by an outer block (e.g. your web request),
+       so one request keeps one ID across many LLM calls
+    3. a new random one
+
+    When the block ends, whatever was bound before is put back, so an
+    outer request's ID is never lost.
+
     Usage:
         with correlation_context() as cid:
             log.info("starting call")   # this line auto-includes correlation_id
     """
-    cid = correlation_id or str(uuid.uuid4())
-    structlog.contextvars.bind_contextvars(correlation_id=cid)
-    try:
+    current = structlog.contextvars.get_contextvars().get("correlation_id")
+    cid = correlation_id or current or str(uuid.uuid4())
+    with structlog.contextvars.bound_contextvars(correlation_id=cid):
         yield cid
-    finally:
-        structlog.contextvars.unbind_contextvars("correlation_id")
