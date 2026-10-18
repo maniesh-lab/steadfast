@@ -27,7 +27,20 @@ class RetryableProviderError(ProviderError):
     """A transient failure — rate limit, 5xx, timeout, connection reset.
 
     Safe (and expected) to retry. retry.py's policy should catch this.
+
+    retry_after: seconds the provider asked us to wait (from its
+        Retry-After header), or None if it didn't say.
     """
+
+    def __init__(
+        self,
+        message: str,
+        provider: str,
+        original_exception: Exception | None = None,
+        retry_after: float | None = None,
+    ):
+        super().__init__(message, provider=provider, original_exception=original_exception)
+        self.retry_after = retry_after
 
 
 class NonRetryableProviderError(ProviderError):
@@ -62,3 +75,20 @@ class ValidationRetryExceeded(SteadfastError):
         self.last_error = last_error
         self.last_response = last_response
         self.errors = errors if errors is not None else []
+
+
+class AllProvidersFailed(ProviderError):
+    """Every provider in the fallback list failed.
+
+    errors: one (provider name, exception) pair per provider tried,
+        in the order they were tried.
+    """
+
+    def __init__(self, errors: list[tuple[str, Exception]]):
+        names = ", ".join(name for name, _ in errors)
+        super().__init__(
+            f"all providers failed: {names}",
+            provider=errors[-1][0] if errors else "none",
+            original_exception=errors[-1][1] if errors else None,
+        )
+        self.errors = errors
