@@ -300,7 +300,9 @@ steadfast/
 │   ├── rate_limit.py            # per-provider rate limiting (aiolimiter)
 │   ├── validation.py            # parse -> schema -> validators -> feedback
 │   ├── logging_utils.py         # structlog setup + correlation IDs
+│   ├── py.typed                 # marks the package as typed
 │   └── providers/
+│       ├── __init__.py
 │       ├── base.py              # adapter contract + shared error rules
 │       ├── _openai_compatible.py  # shared OpenAI-format code (OpenAI, Groq)
 │       ├── openai_provider.py
@@ -312,8 +314,13 @@ steadfast/
 │   └── tool_calling.py          # a small agent loop
 ├── benchmark/                   # no-retry vs retry comparison
 ├── .github/workflows/ci.yml     # lint, tests, build, oldest-versions check
+├── .env.example
+├── .gitignore
 ├── CHANGELOG.md
-└── pyproject.toml
+├── LICENSE
+├── pyproject.toml
+├── requirements.txt
+└── README.md
 ```
 
 ---
