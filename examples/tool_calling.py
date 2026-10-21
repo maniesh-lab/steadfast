@@ -18,10 +18,11 @@ import json
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from steadfast import SteadfastClient, function_tool, tool_result
+from steadfast import SteadfastClient, configure_logging, function_tool, tool_result
 from steadfast.providers.groq_provider import GroqProvider
 
 load_dotenv()
+configure_logging()
 
 # A fake "database" so the example runs on its own.
 ORDERS = {"A100": "shipped on 12 Oct", "A101": "waiting for payment"}

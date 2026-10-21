@@ -1,7 +1,8 @@
 """
-Tests for logging_utils.py — proves correlation IDs actually get bound
+Tests for logging_utils.py: proves correlation IDs actually get bound
 during a block and cleaned up after it, not just that the code runs.
 """
+
 import structlog
 
 from steadfast.logging_utils import correlation_context
@@ -37,6 +38,7 @@ def test_correlation_id_is_unbound_after_block():
         pass
     bound = structlog.contextvars.get_contextvars()
     assert "correlation_id" not in bound
+
 
 def test_reuses_an_outer_id_when_none_is_given():
     with (

@@ -8,9 +8,7 @@ _openai_compatible.py. The one Groq-specific rule is below.
 try:
     import groq
 except ImportError as exc:  # pragma: no cover - only without the SDK installed
-    raise ImportError(
-        'GroqProvider needs the groq SDK: pip install "steadfast-llm[groq]"'
-    ) from exc
+    raise ImportError('GroqProvider needs the groq SDK: pip install "steadfast-llm[groq]"') from exc
 
 from ..exceptions import RetryableProviderError
 from ._openai_compatible import OpenAICompatibleProvider

@@ -89,8 +89,8 @@ def with_retry(max_attempts: int = 5, min_wait: float = 1.0, max_wait: float = 3
 def retrying(max_attempts: int = 5, min_wait: float = 1.0, max_wait: float = 30.0) -> AsyncRetrying:
     """The same policy as with_retry, as an object client.py can reuse:
 
-        async for attempt in retrying(...):
-            with attempt:
-                ...
+    async for attempt in retrying(...):
+        with attempt:
+            ...
     """
     return AsyncRetrying(**_policy(max_attempts, min_wait, max_wait))

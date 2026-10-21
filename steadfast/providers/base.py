@@ -101,7 +101,9 @@ class BaseProvider(ABC):
         if tools:
             raise NotImplementedError(f"{type(self).__name__} doesn't support tool calling")
         text = await self.complete(flatten_messages(messages), **params)
-        return LLMResponse(text=text or "", finish_reason="stop", model=self.model, provider=self.name)
+        return LLMResponse(
+            text=text or "", finish_reason="stop", model=self.model, provider=self.name
+        )
 
     async def complete(self, prompt: str, **params: Any) -> str:
         """Send one prompt, return the reply's text."""

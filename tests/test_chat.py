@@ -76,7 +76,9 @@ async def test_chat_returns_response_and_sends_params():
 
 
 async def test_callers_message_list_is_never_modified(fact_schema):
-    provider = ScriptedProvider("p", [reply('{"topic": "x"}'), reply('{"topic": "x", "fact": "y"}')])
+    provider = ScriptedProvider(
+        "p", [reply('{"topic": "x"}'), reply('{"topic": "x", "fact": "y"}')]
+    )
     client = make_client(provider)
     messages = [{"role": "user", "content": "give me a fact"}]
 
@@ -125,7 +127,9 @@ async def test_bad_settings_are_rejected():
 
 
 async def test_schema_feedback_is_sent_as_conversation_turns(fact_schema):
-    provider = ScriptedProvider("p", [reply('{"topic": "x"}'), reply('{"topic": "x", "fact": "y"}')])
+    provider = ScriptedProvider(
+        "p", [reply('{"topic": "x"}'), reply('{"topic": "x", "fact": "y"}')]
+    )
     client = make_client(provider)
 
     response = await client.chat("p", [{"role": "user", "content": "fact?"}], schema=fact_schema)
@@ -168,7 +172,9 @@ async def test_async_validators_are_awaited(fact_schema):
 
 
 async def test_tool_calls_come_back_and_skip_the_schema(fact_schema):
-    call = ToolCall(id="c1", name="search", arguments={"q": "refund"}, raw_arguments='{"q": "refund"}')
+    call = ToolCall(
+        id="c1", name="search", arguments={"q": "refund"}, raw_arguments='{"q": "refund"}'
+    )
     provider = ScriptedProvider("p", [reply(tool_calls=[call], finish="tool_calls")])
     client = make_client(provider)
     tools = [function_tool("search", "Search docs.", {"type": "object", "properties": {}})]
@@ -185,7 +191,9 @@ async def test_tool_calls_come_back_and_skip_the_schema(fact_schema):
 
 async def test_broken_tool_arguments_are_retried_with_feedback():
     broken = ToolCall(id="c1", name="search", arguments=None, raw_arguments='{"q": "refund"')
-    fixed = ToolCall(id="c2", name="search", arguments={"q": "refund"}, raw_arguments='{"q": "refund"}')
+    fixed = ToolCall(
+        id="c2", name="search", arguments={"q": "refund"}, raw_arguments='{"q": "refund"}'
+    )
     provider = ScriptedProvider("p", [reply(tool_calls=[broken]), reply(tool_calls=[fixed])])
     client = make_client(provider)
 
@@ -218,10 +226,18 @@ def test_tool_round_trip_helpers():
         "role": "assistant",
         "content": None,
         "tool_calls": [
-            {"id": "c1", "type": "function", "function": {"name": "search", "arguments": '{"q": "x"}'}}
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "search", "arguments": '{"q": "x"}'},
+            }
         ],
     }
-    assert tool_result(call, "found 3") == {"role": "tool", "tool_call_id": "c1", "content": "found 3"}
+    assert tool_result(call, "found 3") == {
+        "role": "tool",
+        "tool_call_id": "c1",
+        "content": "found 3",
+    }
 
 
 def test_function_tool_accepts_pydantic_dict_or_nothing():
@@ -230,8 +246,13 @@ def test_function_tool_accepts_pydantic_dict_or_nothing():
 
     from_model = function_tool("search", "Search.", Args)
     assert from_model["function"]["parameters"]["required"] == ["query"]
-    assert function_tool("ping", "Ping.")["function"]["parameters"] == {"type": "object", "properties": {}}
-    assert function_tool("x", "X.", {"type": "object"})["function"]["parameters"] == {"type": "object"}
+    assert function_tool("ping", "Ping.")["function"]["parameters"] == {
+        "type": "object",
+        "properties": {},
+    }
+    assert function_tool("x", "X.", {"type": "object"})["function"]["parameters"] == {
+        "type": "object"
+    }
     with pytest.raises(TypeError):
         function_tool("x", "X.", 42)
 
@@ -240,11 +261,15 @@ def test_function_tool_accepts_pydantic_dict_or_nothing():
 
 
 async def test_falls_back_to_next_provider():
-    primary = ScriptedProvider("primary", [NonRetryableProviderError("bad key", provider="primary")])
+    primary = ScriptedProvider(
+        "primary", [NonRetryableProviderError("bad key", provider="primary")]
+    )
     backup = ScriptedProvider("backup", [reply("from backup")])
     client = make_client(primary, backup)
 
-    response = await client.chat("primary", [{"role": "user", "content": "q"}], fallbacks=["backup"])
+    response = await client.chat(
+        "primary", [{"role": "user", "content": "q"}], fallbacks=["backup"]
+    )
 
     assert response.text == "from backup"
     assert response.provider == "backup"
@@ -303,7 +328,9 @@ async def test_same_provider_can_be_registered_twice_under_different_names():
     assert client.register(big, name="groq-big") == "groq-big"
     client.register(small, name="groq-small", rate=1000, period=1)
 
-    response = await client.chat("groq-big", [{"role": "user", "content": "q"}], fallbacks=["groq-small"])
+    response = await client.chat(
+        "groq-big", [{"role": "user", "content": "q"}], fallbacks=["groq-small"]
+    )
 
     assert response.text == "from small"
     assert response.provider == "groq-small"

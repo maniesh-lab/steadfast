@@ -106,7 +106,11 @@ async def test_openai_request_is_built_correctly():
     tools = [{"type": "function", "function": {"name": "f", "parameters": {}}}]
 
     await provider.chat(
-        [{"role": "user", "content": "q"}], tools=tools, tool_choice="auto", max_tokens=99, temperature=0
+        [{"role": "user", "content": "q"}],
+        tools=tools,
+        tool_choice="auto",
+        max_tokens=99,
+        temperature=0,
     )
 
     request = create.calls[0]
@@ -157,7 +161,9 @@ async def test_openai_non_object_arguments_count_as_broken():
 
 
 async def test_openai_rate_limit_is_retryable_with_retry_after():
-    error = openai.RateLimitError("slow down", response=http_response(429, {"retry-after": "3"}), body=None)
+    error = openai.RateLimitError(
+        "slow down", response=http_response(429, {"retry-after": "3"}), body=None
+    )
     provider, _ = openai_style(OpenAIProvider, error)
 
     with pytest.raises(RetryableProviderError) as info:
@@ -194,7 +200,9 @@ async def test_groq_uses_same_format():
 
 async def test_groq_tool_use_failed_is_retryable():
     error = groq.BadRequestError(
-        "Failed to call a function", response=http_response(400), body={"error": {"code": "tool_use_failed"}}
+        "Failed to call a function",
+        response=http_response(400),
+        body={"error": {"code": "tool_use_failed"}},
     )
     provider, _ = openai_style(GroqProvider, error)
 
@@ -229,7 +237,11 @@ def test_anthropic_message_translation():
             "role": "assistant",
             "content": "Let me check.",
             "tool_calls": [
-                {"id": "t1", "type": "function", "function": {"name": "search", "arguments": '{"q": "refund"}'}},
+                {
+                    "id": "t1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": '{"q": "refund"}'},
+                },
                 {"id": "t2", "type": "function", "function": {"name": "lookup", "arguments": "{}"}},
             ],
         },
@@ -256,12 +268,22 @@ def test_anthropic_message_translation():
 
 
 def test_anthropic_tools_and_tool_choice_translation():
-    tools = [{"type": "function", "function": {"name": "f", "description": "d", "parameters": {"type": "object"}}}]
-    assert to_anthropic_tools(tools) == [{"name": "f", "description": "d", "input_schema": {"type": "object"}}]
+    tools = [
+        {
+            "type": "function",
+            "function": {"name": "f", "description": "d", "parameters": {"type": "object"}},
+        }
+    ]
+    assert to_anthropic_tools(tools) == [
+        {"name": "f", "description": "d", "input_schema": {"type": "object"}}
+    ]
     assert to_anthropic_tool_choice("auto") == {"type": "auto"}
     assert to_anthropic_tool_choice("required") == {"type": "any"}
     assert to_anthropic_tool_choice("none") == {"type": "none"}
-    assert to_anthropic_tool_choice({"type": "function", "function": {"name": "f"}}) == {"type": "tool", "name": "f"}
+    assert to_anthropic_tool_choice({"type": "function", "function": {"name": "f"}}) == {
+        "type": "tool",
+        "name": "f",
+    }
     assert to_anthropic_tool_choice(None) is None
     with pytest.raises(ValueError):
         to_anthropic_tool_choice("sometimes")
@@ -302,7 +324,9 @@ async def test_anthropic_request_and_response():
 
 
 async def test_anthropic_max_tokens_stop_reason_is_length():
-    result = NS(content=[NS(type="text", text="cut")], stop_reason="max_tokens", usage=None, model=None)
+    result = NS(
+        content=[NS(type="text", text="cut")], stop_reason="max_tokens", usage=None, model=None
+    )
     provider, create = anthropic_style(result)
 
     response = await provider.chat([{"role": "user", "content": "q"}])
@@ -335,7 +359,9 @@ async def test_full_tool_loop_through_the_client():
     provider = OpenAIProvider(api_key="test")
     create = FakeCreate(None)
     replies = [
-        openai_reply(None, [openai_tool_call("c1", "get_plan", '{"customer_id": 7}')], "tool_calls"),
+        openai_reply(
+            None, [openai_tool_call("c1", "get_plan", '{"customer_id": 7}')], "tool_calls"
+        ),
         openai_reply("Customer 7 is on the premium plan."),
     ]
 
@@ -348,13 +374,18 @@ async def test_full_tool_loop_through_the_client():
     client.register(provider, rate=1000, period=1)
 
     messages = [{"role": "user", "content": "What plan is customer 7 on?"}]
-    first = await client.chat("openai", messages, tools=[{"type": "function", "function": {"name": "get_plan"}}])
+    first = await client.chat(
+        "openai", messages, tools=[{"type": "function", "function": {"name": "get_plan"}}]
+    )
     call = first.tool_calls[0]
     messages += [first.to_message(), tool_result(call, "premium")]
     final = await client.chat("openai", messages)
 
     assert final.text == "Customer 7 is on the premium plan."
     sent = create.calls[1]["messages"]
-    assert sent[1]["tool_calls"][0]["function"] == {"name": "get_plan", "arguments": '{"customer_id": 7}'}
+    assert sent[1]["tool_calls"][0]["function"] == {
+        "name": "get_plan",
+        "arguments": '{"customer_id": 7}',
+    }
     assert sent[2] == {"role": "tool", "tool_call_id": "c1", "content": "premium"}
     assert client.usage["openai"].input_tokens == 24

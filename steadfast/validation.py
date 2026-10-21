@@ -32,9 +32,7 @@ _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
 # Don't paste an enormous bad reply back into the next prompt.
 _MAX_ECHO_CHARS = 2000
 
-_CUT_OFF_PROBLEM = (
-    "your reply was cut off because it hit the token limit - give a shorter answer"
-)
+_CUT_OFF_PROBLEM = "your reply was cut off because it hit the token limit - give a shorter answer"
 
 
 def extract_json(raw):

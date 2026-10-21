@@ -1,7 +1,8 @@
 """
-Tests for client.py — the full wiring, tested with a fake provider so
+Tests for client.py: the full wiring, tested with a fake provider so
 no real API calls happen and no real API key is needed.
 """
+
 import pytest
 import structlog
 
@@ -11,7 +12,7 @@ from steadfast.providers.base import BaseProvider
 
 
 class FakeProvider(BaseProvider):
-    """A stand-in provider — returns pre-scripted responses instead of
+    """A stand-in provider: returns pre-scripted responses instead of
     calling a real API. Each call to complete() pops the next one off
     the list, in order."""
 
@@ -53,10 +54,12 @@ async def test_schema_call_validates_and_returns_object(fact_schema):
 
 
 async def test_schema_call_retries_after_bad_json(fact_schema):
-    provider = FakeProvider([
-        '{"topic": "x"}',                    # missing "fact" — fails validation
-        '{"topic": "x", "fact": "y"}',        # valid on 2nd try
-    ])
+    provider = FakeProvider(
+        [
+            '{"topic": "x"}',  # missing "fact": fails validation
+            '{"topic": "x", "fact": "y"}',  # valid on 2nd try
+        ]
+    )
     client = SteadfastClient()
     client.register(provider, rate=100, period=1)
 
@@ -67,13 +70,13 @@ async def test_schema_call_retries_after_bad_json(fact_schema):
 
 
 async def test_retryable_provider_error_gets_retried():
-    # Note: client.py uses @with_retry() with default wait times, so
-    # this test takes a real 1-2 seconds — that's expected, not a bug.
-    provider = FakeProvider([
-        RetryableProviderError("temporary", provider="fake"),
-        "recovered",
-    ])
-    client = SteadfastClient()
+    provider = FakeProvider(
+        [
+            RetryableProviderError("temporary", provider="fake"),
+            "recovered",
+        ]
+    )
+    client = SteadfastClient(min_wait=0.01, max_wait=0.02)  # keep the test fast
     client.register(provider, rate=100, period=1)
 
     result = await client.complete("fake", "say hi")
@@ -89,10 +92,12 @@ async def test_unregistered_provider_raises():
 
 
 async def test_feedback_reaches_the_prompt(fact_schema):
-    provider = FakeProvider([
-        '{"topic": "x"}',                    # missing "fact"
-        '{"topic": "x", "fact": "y"}',
-    ])
+    provider = FakeProvider(
+        [
+            '{"topic": "x"}',  # missing "fact"
+            '{"topic": "x", "fact": "y"}',
+        ]
+    )
     client = SteadfastClient()
     client.register(provider, rate=100, period=1)
 
@@ -100,7 +105,7 @@ async def test_feedback_reaches_the_prompt(fact_schema):
 
     assert provider.prompts[0] == "give me a fact"  # first prompt untouched
     assert '{"topic": "x"}' in provider.prompts[1]  # model's bad reply echoed
-    assert "fact" in provider.prompts[1]            # and what was wrong
+    assert "fact" in provider.prompts[1]  # and what was wrong
 
 
 async def test_max_attempts_is_respected(fact_schema):
@@ -115,10 +120,12 @@ async def test_max_attempts_is_respected(fact_schema):
 
 
 async def test_validators_work_through_the_client(fact_schema):
-    provider = FakeProvider([
-        '{"topic": "x", "fact": "TODO"}',
-        '{"topic": "x", "fact": "real fact"}',
-    ])
+    provider = FakeProvider(
+        [
+            '{"topic": "x", "fact": "TODO"}',
+            '{"topic": "x", "fact": "real fact"}',
+        ]
+    )
     client = SteadfastClient()
     client.register(provider, rate=100, period=1)
 

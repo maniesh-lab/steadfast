@@ -25,7 +25,9 @@ jobs:
         run: pip install -e ".[providers,dev]"
 
       - name: Lint
-        run: ruff check .
+        run: |
+          ruff check .
+          ruff format --check .
 
       - name: Test
         run: pytest -q --cov=steadfast --cov-report=term-missing

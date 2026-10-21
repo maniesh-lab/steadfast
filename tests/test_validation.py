@@ -1,7 +1,8 @@
 """
-Tests for validation.py — proves the validate-and-retry loop works
+Tests for validation.py: proves the validate-and-retry loop works
 without needing any real LLM call.
 """
+
 import pytest
 from pydantic import ValidationError
 
@@ -28,7 +29,7 @@ def test_validate_json_failure_raises(fact_schema):
 
 async def test_validate_with_retry_succeeds_after_bad_first_attempt(fact_schema):
     responses = [
-        '{"topic": "octopuses"}',  # missing "fact" — fails validation
+        '{"topic": "octopuses"}',  # missing "fact": fails validation
         '{"topic": "octopuses", "fact": "they have three hearts"}',  # valid
     ]
     call_count = {"n": 0}
@@ -82,6 +83,7 @@ def test_validate_json_accepts_fenced_json(fact_schema):
 
 # ---------- v0.2: error formatting and feedback ----------
 
+
 def test_format_errors_names_the_field(fact_schema):
     with pytest.raises(ValidationError) as exc_info:
         validate_json(fact_schema, '{"topic": "octopuses"}')
@@ -101,6 +103,7 @@ def test_build_feedback_truncates_huge_replies():
 
 
 # ---------- v0.2: loop behaviour ----------
+
 
 async def test_feedback_is_passed_to_next_attempt(fact_schema):
     seen = []

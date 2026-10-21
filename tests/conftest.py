@@ -1,7 +1,8 @@
 """
 Shared pytest fixtures. Anything defined here is automatically
-available to every test file in this folder — no import needed.
+available to every test file in this folder: no import needed.
 """
+
 import pytest
 from pydantic import BaseModel
 

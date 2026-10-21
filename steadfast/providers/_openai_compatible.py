@@ -92,7 +92,9 @@ class OpenAICompatibleProvider(BaseProvider):
             except ValueError:
                 arguments = None  # the client spots this and asks for a fix
             tool_calls.append(
-                ToolCall(id=call.id, name=call.function.name, arguments=arguments, raw_arguments=raw)
+                ToolCall(
+                    id=call.id, name=call.function.name, arguments=arguments, raw_arguments=raw
+                )
             )
 
         usage = Usage()

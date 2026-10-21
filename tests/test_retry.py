@@ -1,7 +1,8 @@
 """
-Tests for retry.py — no real API calls. Just fake functions that fail
+Tests for retry.py: no real API calls. Just fake functions that fail
 on purpose, to prove the retry policy behaves correctly.
 """
+
 from steadfast.exceptions import NonRetryableProviderError, RetryableProviderError
 from steadfast.retry import with_retry
 

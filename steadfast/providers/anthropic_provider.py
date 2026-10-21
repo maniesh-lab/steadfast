@@ -51,7 +51,9 @@ def _text_of(content: Any) -> str:
     return str(content or "")
 
 
-def to_anthropic_messages(messages: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]]]:
+def to_anthropic_messages(
+    messages: list[dict[str, Any]],
+) -> tuple[str | None, list[dict[str, Any]]]:
     """Translate OpenAI-format messages. Returns (system, messages)."""
     system_parts: list[str] = []
     out: list[dict[str, Any]] = []

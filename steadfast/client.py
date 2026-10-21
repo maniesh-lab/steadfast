@@ -43,7 +43,9 @@ class SteadfastClient:
         self.max_wait = max_wait
         self.usage: dict[str, Usage] = {}  # tokens used, per provider name
 
-    def register(self, provider, rate: int = 50, period: float = 60, name: str | None = None) -> str:
+    def register(
+        self, provider, rate: int = 50, period: float = 60, name: str | None = None
+    ) -> str:
         """Register a provider instance and set its rate limit
         (`rate` calls per `period` seconds).
 
@@ -113,7 +115,7 @@ class SteadfastClient:
         names = [provider_name, *(fallbacks or [])]
         for name in names:
             if name not in self.providers:
-                raise KeyError(f"Provider '{name}' not registered — call register() first.")
+                raise KeyError(f"Provider '{name}' not registered. Call register() first.")
 
         with correlation_context(correlation_id) as cid:
             log.info("calling provider", provider=provider_name, correlation_id=cid)

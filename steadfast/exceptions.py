@@ -24,7 +24,7 @@ class ProviderError(SteadfastError):
 
 
 class RetryableProviderError(ProviderError):
-    """A transient failure — rate limit, 5xx, timeout, connection reset.
+    """A transient failure: rate limit, 5xx, timeout, connection reset.
 
     Safe (and expected) to retry. retry.py's policy should catch this.
 
@@ -44,7 +44,7 @@ class RetryableProviderError(ProviderError):
 
 
 class NonRetryableProviderError(ProviderError):
-    """A permanent failure — bad API key, malformed request, 4xx that isn't
+    """A permanent failure: bad API key, malformed request, 4xx that isn't
     a rate limit. Retrying this will never succeed, so retry.py should
     let it raise immediately instead of burning attempts on it.
     """
