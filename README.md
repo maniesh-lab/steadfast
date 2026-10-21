@@ -335,12 +335,13 @@ pip install -e ".[providers,dev]"
 
 pytest                    # 97 tests, no API key needed
 ruff check .              # lint
+ruff format .             # format the code (CI fails if it isn't)
 cp .env.example .env      # add a free Groq key from console.groq.com
 python examples/basic_usage.py
 python examples/tool_calling.py
 ```
 
-CI runs lint, tests with coverage, and a package build on Python 3.10–3.13,
+CI runs lint, a formatting check, tests with coverage, and a package build on Python 3.10–3.13,
 plus one job that installs the oldest dependency versions `pyproject.toml`
 allows, so the minimum versions are real.
 
