@@ -1,6 +1,7 @@
 # steadfast
 
 [![CI](https://github.com/maniesh-lab/steadfast/actions/workflows/ci.yml/badge.svg)](https://github.com/maniesh-lab/steadfast/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/maniesh-lab/steadfast/branch/main/graph/badge.svg)](https://codecov.io/gh/maniesh-lab/steadfast)
 [![PyPI](https://img.shields.io/pypi/v/steadfast-llm)](https://pypi.org/project/steadfast-llm/)
 [![Python](https://img.shields.io/pypi/pyversions/steadfast-llm)](https://pypi.org/project/steadfast-llm/)
 
